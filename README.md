@@ -4,7 +4,7 @@
 ## Description
 
 Simple command-line utility to fetch discounted games from
-[gog.com](http://www.gog.com), using their API.
+[gog.com](http://www.gog.com), using their [API](https://gogapidocs.readthedocs.io/en/latest/).
 
 Written in Python.
 

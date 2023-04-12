@@ -1,0 +1,124 @@
+#!/bin/python3
+
+# Import libraries used to:
+# Make HTTP requests
+# Load and parse JSON
+# Create and handle command-line arguments
+# Handle suspending thread execution
+import requests, json, argparse, time
+
+# Handle creating and parsing command-line arguments
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        prog="goggers",
+        description="Fetch discounted GOG.com games"
+    )
+
+    # Limit the number of pages iterated
+    parser.add_argument('-p', '--page-limit', required=True)
+
+    # Limit the number of games per page of requests
+    parser.add_argument('-l', '--entry-limit', required=True)
+
+    # Print technical stuff to stdout
+    parser.add_argument('-v', '--verbose', action='store_true', required=False)
+
+    # Output to a file
+    parser.add_argument('-o', '--output', required=False)
+
+    args = parser.parse_args()
+    
+    return args
+
+
+# Used to make requests to GOG.com
+def fetch_games_api(entry_limit, url = ""):
+
+    # If a URL isn't provided (always upon first function call),
+    # default to fetching the first page of results
+    # used so the number of pages to iterate through can be retrieved
+    url = url or f"https://www.gog.com/games/ajax/filtered?mediaType=game&limit={entry_limit}"
+
+    r = requests.get(url)
+
+    if r.status_code != 200:
+        print(f"Could not fetch games list from GOG API! Error: {r.status_code}")
+        exit()
+    
+    return r.text
+
+
+# Handle parsing the JSON response per page, and extracting game information
+def parse_games(raw):
+    loaded = json.loads(raw)
+
+    # Blank array games are pushed to
+    discounted = []
+
+    # Iterate through each game on the page
+    for item in loaded["products"]:
+
+        # Check if the game is discounted
+        if item["isDiscounted"] == True:
+
+            # Append a concatenation of the game's:
+            # Title, price and URL
+            discounted.append(
+                item["title"] + ", " + item["price"]["symbol"] + item["price"]["finalAmount"] + ", " + "http://www.gog.com" + item["url"]
+            )
+
+    return discounted
+
+
+# Handle iterating through returned pages
+def parse_pages(raw, args):
+    loaded = json.loads(raw)
+
+    # Check total number of possible pages to iterate and convert to int
+    total_pages = loaded["totalPages"]
+    total_pages = int(total_pages)
+
+    # Convert page limit from command-line to int
+    args.page_limit = int(args.page_limit)
+
+    # Check how many pages to iterate through in total
+    if args.page_limit <= total_pages:
+        iter = args.page_limit
+    if args.page_limit >= total_pages:
+        iter = total_pages
+
+    discounted = []
+
+    for page in range(1, iter):
+        if args.verbose:
+            print(f"Iterating through page {page} / {iter}")
+
+        url = f"https://www.gog.com/games/ajax/filtered?mediaType=game&limit={args.entry_limit}&page={page}"
+        raw = fetch_games_api(args.entry_limit, url)
+        games = parse_games(raw)
+        discounted.append(games)
+
+        if args.verbose:
+            print(f"Found {len(games)} discounted items in current page")
+
+        time.sleep(1)
+
+    # Iterate through discounted games
+    for page in discounted:
+        for entry in page:
+
+            # Write currently iterated title to file or stdout
+            if args.output:
+                file = open(args.output, "a")
+                file.writelines(entry + "\n")
+            else:
+                print(entry)
+
+
+def main():
+    args = parse_arguments()
+    raw = fetch_games_api(args.entry_limit)
+    parse_pages(raw, args)
+
+
+main()
